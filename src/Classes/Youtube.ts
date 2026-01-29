@@ -24,9 +24,16 @@ export class YoutubeExtractor extends BaseExtractor<YoutubeOptions> {
         this._stream = null;
     }
 
-    public async validate(query: string, type?: SearchQueryType | null): Promise<boolean> {
+    public async validate(query: string, type?: SearchQueryType | null | undefined): Promise<boolean> {
         if (typeof query !== "string") return false;
-        return true;
+        return ([
+            QueryType.AUTO,
+            QueryType.AUTO_SEARCH,
+            QueryType.YOUTUBE,
+            QueryType.YOUTUBE_PLAYLIST,
+            QueryType.YOUTUBE_SEARCH,
+            QueryType.YOUTUBE_VIDEO
+        ] as SearchQueryType[]).some((r) => r === type);
     }
 
     public async handle(query: string, context: ExtractorSearchContext): Promise<ExtractorInfo> {
