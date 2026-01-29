@@ -63,7 +63,8 @@ export class YoutubeTrack extends Track {
     }
 
     async downloadSabr(): Promise<Readable> {
-        return await createSabrStream(this);
+        const isLive = this.raw?.live || this.live || false;
+        return await createSabrStream(this, isLive);
     }
 
     setCache(opt: AdaptiveSetCacheOptions | ServerAbrCacheOptions) {
