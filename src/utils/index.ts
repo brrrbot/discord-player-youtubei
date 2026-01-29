@@ -1,7 +1,7 @@
 import { ProxyAgent } from "undici";
 import { YOUTUBE_REGEX } from "../Constants";
 import type { peerOptions, playlistObj, YoutubeOptions } from "../types";
-import Innertube, { Platform, Types } from "youtubei.js";
+import Innertube, { ClientType, Platform, Types } from "youtubei.js";
 import { once, PassThrough, Readable } from "node:stream";
 
 let tube: Innertube | null = null;
@@ -103,52 +103,8 @@ export async function getInnertube(options?: YoutubeOptions & { force?: boolean 
             retrieve_player: !options?.disablePlayer,
             fetch: createYoutubeFetch(options),
             cookie: options.cookie ?? null,
+            client_type: ClientType.WEB,
         });
     }
     return tube;
-}
-
-export function passThroughStream(audioStream: any) {
-    const passThrough = new PassThrough();
-
-    if (audioStream) {
-        if (typeof audioStream === "function") {
-            audioStream.pipe(passThrough);
-        } else if (typeof audioStream.getReader === "function") {
-            const reader = audioStream.getReader();
-            (async () => {
-                try {
-                    while (true) {
-                        const { value, done } = await reader.read();
-                        if (done) {
-                            passThrough.end();
-                            break;
-                        }
-                        if (value !== undefined) {
-                            passThrough.write(value);
-                        }
-                    }
-                } catch (error) {
-                    passThrough.destroy(error as Error);
-                } finally {
-                    reader.releaseLock?.();
-                }
-            })();
-        } else if (Symbol.asyncIterator in audioStream) {
-            (async () => {
-                try {
-                    for await (const chunk of audioStream) {
-                        passThrough.write(chunk);
-                    }
-                    passThrough.end();
-                } catch (error) {
-                    passThrough.destroy(error as Error);
-                }
-            })();
-        } else {
-            throw new TypeError("Unsupported stream type from SABR");
-        }
-    }
-
-    return passThrough;
 }

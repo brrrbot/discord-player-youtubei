@@ -1,5 +1,5 @@
 import Innertube, { Constants, YT, YTNodes } from "youtubei.js";
-import { getInnertube, getVideoId, passThroughStream, toNodeReadable } from "../utils";
+import { getInnertube, getVideoId, toNodeReadable } from "../utils";
 import { getWebPoMinter, invalidateWebPoMinter } from "../Token/tokenGenerator";
 import { SabrFormat } from "googlevideo/shared-types";
 import { SabrStream, SabrStreamConfig } from "googlevideo/sabr-stream";
@@ -8,12 +8,14 @@ import { DEFAULT_OPTIONS } from "../Constants";
 import { Readable } from "node:stream";
 import { CacheType, YoutubeTrack } from "../Classes";
 
-export async function createSabrStream(video: YoutubeTrack, isLive: boolean = false): Promise<Readable | null> {
-    console.log(`[SabrStream] Starting createSabrStream for video, isLive: ${isLive}`);
+export async function createSabrStream(video: YoutubeTrack): Promise<Readable | null> {
+    console.log(`[SabrStream] Starting createSabrStream for video: ${video.url}`);
 
     const innertube: Innertube | null = await getInnertube();
-    let accountInfo: YT.AccountInfo | null;
     const videoId: string = getVideoId(video.url);
+
+    // ===== VOD HANDLING WITH SABR =====
+    let accountInfo: YT.AccountInfo | null;
     let serverAbrStream: SabrStream;
 
     console.log(`[SabrStream] Video ID: ${videoId}`);
@@ -77,7 +79,7 @@ export async function createSabrStream(video: YoutubeTrack, isLive: boolean = fa
             });
 
             console.log(`[SabrStream] Player response received`);
-
+            console.log(`[Player Response Url] streaming url: `, playerResponse.streaming_data);
             const serverAbrStreamingUrl = await innertube.session.player?.decipher(playerResponse.streaming_data?.server_abr_streaming_url);
             const videoPlaybackUstreamerConfig = playerResponse.player_config?.media_common_config.media_ustreamer_request_config?.video_playback_ustreamer_config;
 
@@ -87,39 +89,7 @@ export async function createSabrStream(video: YoutubeTrack, isLive: boolean = fa
             if (!videoPlaybackUstreamerConfig) throw new Error("ustreamerConfig not found");
             if (!serverAbrStreamingUrl) throw new Error("serverAbrStreamingUrl not found");
 
-            const allFormats: SabrFormat[] = playerResponse.streaming_data?.adaptive_formats.map(buildSabrFormat) || [];
-            console.log(`[SabrStream] Total formats available: ${allFormats.length}`);
-
-            // Log all available formats for debugging
-            allFormats.forEach((fmt, idx) => {
-                console.log(`[SabrStream] Format ${idx}: ${fmt.mimeType}, bitrate: ${fmt.bitrate}, hasAudio: ${fmt.mimeType?.includes('audio/') || (fmt.mimeType?.includes('codecs') && !fmt.mimeType?.includes('video/'))}`);
-            });
-
-            // Filter for MP4 audio-only formats
-            const audioFormats = allFormats.filter(fmt => {
-                const hasAudio = fmt.mimeType?.includes('audio/') ||
-                    (fmt.mimeType?.includes('codecs') && !fmt.mimeType?.includes('video/'));
-
-                if (!hasAudio) return false;
-
-                return fmt.mimeType?.includes('mp4');
-            });
-
-            console.log(`[SabrStream] Filtered to ${audioFormats.length} MP4 audio formats`);
-
-            // Sort by bitrate (higher quality first)
-            audioFormats.sort((a, b) => {
-                const aBitrate = a.bitrate || 0;
-                const bBitrate = b.bitrate || 0;
-                return bBitrate - aBitrate;
-            });
-
-            const sabrFormats = audioFormats.length > 0 ? audioFormats : allFormats;
-
-            console.log(`[SabrStream] Selected ${sabrFormats.length} formats for ${isLive ? 'live' : 'regular'} video`);
-            if (sabrFormats.length > 0) {
-                console.log(`[SabrStream] Top format: ${sabrFormats[0].mimeType}, bitrate: ${sabrFormats[0].bitrate}`);
-            }
+            const sabrFormats: SabrFormat[] = playerResponse.streaming_data?.adaptive_formats.map(buildSabrFormat) || [];
 
             SabrStreamConfig = {
                 formats: sabrFormats,
@@ -147,7 +117,7 @@ export async function createSabrStream(video: YoutubeTrack, isLive: boolean = fa
 
     console.log(`[SabrStream] Setting up stream protection listener...`);
     serverAbrStream.on("streamProtectionStatusUpdate", async (statusUpdate: any) => {
-        console.log(`[SabrStream] Stream protection status update: ${statusUpdate.status}`);
+        // console.log(`[SabrStream] Stream protection status update: ${statusUpdate.status}`);
         if (statusUpdate.status !== lastStatus) lastStatus = statusUpdate.status;
         if (statusUpdate.status === 2) {
             protectionFailureCount = Math.min(protectionFailureCount + 1, 10);
@@ -171,11 +141,6 @@ export async function createSabrStream(video: YoutubeTrack, isLive: boolean = fa
         }
     });
 
-    // Add error listener
-    // serverAbrStream.on("error", (error: any) => {
-    //     console.error(`[SabrStream] Stream error event:`, error);
-    // });
-
     // Add abort listener
     serverAbrStream.on("abort", () => {
         console.log(`[SabrStream] Stream aborted`);
@@ -188,10 +153,6 @@ export async function createSabrStream(video: YoutubeTrack, isLive: boolean = fa
 
     const playbackOptions = {
         ...DEFAULT_OPTIONS,
-        preferMP4: true,
-        preferWebM: false,
-        preferH264: false,
-        stallDetectionMs: isLive ? 20000 : 15000,
     };
 
     console.log(`[SabrStream] Playback options:`, playbackOptions);
@@ -200,7 +161,7 @@ export async function createSabrStream(video: YoutubeTrack, isLive: boolean = fa
     const { audioStream } = await serverAbrStream.start(playbackOptions);
     console.log(`[SabrStream] Stream started, creating Node stream...`);
 
-    const nodeStream = passThroughStream(audioStream);
+    const nodeStream = toNodeReadable(audioStream);
     console.log(`[SabrStream] Node stream created successfully`);
 
     return nodeStream;

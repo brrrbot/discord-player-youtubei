@@ -10,4 +10,5 @@ export const DEFAULT_EXPIRE_DURATION = 10800000;
 export const DEFAULT_OPTIONS: SabrPlaybackOptions = {
     audioQuality: "AUDIO_QUALITY_MEDIUM",
     enabledTrackTypes: EnabledTrackTypes.AUDIO_ONLY,
+    preferH264: true,
 }
