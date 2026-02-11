@@ -1,4 +1,4 @@
-import Innertube, { Constants, YT, YTNodes } from "youtubei.js";
+import Innertube, { Constants, Platform, Types, YT, YTNodes } from "youtubei.js";
 import { getInnertube, getVideoId, toNodeReadable } from "../utils";
 import { getWebPoMinter, invalidateWebPoMinter } from "../Token/tokenGenerator";
 import { SabrFormat } from "googlevideo/shared-types";
@@ -7,12 +7,33 @@ import { buildSabrFormat } from "googlevideo/utils";
 import { DEFAULT_OPTIONS } from "../Constants";
 import { Readable } from "node:stream";
 import { CacheType, YoutubeTrack } from "../Classes";
+import { createLiveStream } from "./LiveStreamV2";
+
+Platform.shim.eval = async (data: Types.BuildScriptResult, env: Record<string, Types.VMPrimative>) => {
+    const properties = [];
+    if (env.n) properties.push(`n: exportedVars.nFunction("${env.n}")`);
+    if (env.sig) properties.push(`sig: exportedVars.sigFunction("${env.sig}")`);
+    const code = `${data.output}\nreturn { ${properties.join(', ')} }`;
+    return new Function(code)();
+};
 
 export async function createSabrStream(video: YoutubeTrack): Promise<Readable | null> {
     console.log(`[SabrStream] Starting createSabrStream for video: ${video.url}`);
 
     const innertube: Innertube | null = await getInnertube();
     const videoId: string = getVideoId(video.url);
+
+    // ====== LIVE STREAM HANDLING ======
+    const videoInfo = await innertube.getBasicInfo(videoId);
+
+    if (videoInfo.playability_status?.status !== 'OK') throw new Error(`Cannot play video: ${videoInfo.playability_status?.reason}`);
+
+    const isLive = videoInfo.basic_info.is_live;
+    const isPostLiveDVR = !!videoInfo.basic_info.is_post_live_dvr;
+    
+    console.log(`[SabrStream] Stream type - isLive:${isLive}, isPostLiveDVR:${isPostLiveDVR}`);
+
+    if (isLive || isPostLiveDVR) return await createLiveStream(videoId);
 
     // ===== VOD HANDLING WITH SABR =====
     let accountInfo: YT.AccountInfo | null;
@@ -79,7 +100,7 @@ export async function createSabrStream(video: YoutubeTrack): Promise<Readable | 
             });
 
             console.log(`[SabrStream] Player response received`);
-            console.log(`[Player Response Url] streaming url: `, playerResponse.streaming_data);
+            console.log(`[SabrStream] Player response url: `, playerResponse.streaming_data);
             const serverAbrStreamingUrl = await innertube.session.player?.decipher(playerResponse.streaming_data?.server_abr_streaming_url);
             const videoPlaybackUstreamerConfig = playerResponse.player_config?.media_common_config.media_ustreamer_request_config?.video_playback_ustreamer_config;
 
