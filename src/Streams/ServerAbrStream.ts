@@ -7,7 +7,7 @@ import { buildSabrFormat } from "googlevideo/utils";
 import { DEFAULT_OPTIONS } from "../Constants";
 import { Readable } from "node:stream";
 import { CacheType, YoutubeTrack } from "../Classes";
-import { createLiveStream } from "./LiveStreamV2";
+import { createLiveStream } from "./LiveStream";
 
 Platform.shim.eval = async (data: Types.BuildScriptResult, env: Record<string, Types.VMPrimative>) => {
     const properties = [];
