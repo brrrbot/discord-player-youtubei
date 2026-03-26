@@ -25,18 +25,7 @@ export class YoutubeExtractor extends BaseExtractor<YoutubeOptions> {
     }
 
     public async validate(query: string, type?: SearchQueryType | null | undefined): Promise<boolean> {
-        if (typeof query !== "string") return false;
-        console.log(query);
         return true;
-        // console.log(type);
-        // return ([
-        //     QueryType.AUTO,
-        //     QueryType.AUTO_SEARCH,
-        //     QueryType.YOUTUBE,
-        //     QueryType.YOUTUBE_PLAYLIST,
-        //     QueryType.YOUTUBE_SEARCH,
-        //     QueryType.YOUTUBE_VIDEO
-        // ] as SearchQueryType[]).some((r) => r === type);
     }
 
     public async handle(query: string, context: ExtractorSearchContext): Promise<ExtractorInfo> {
